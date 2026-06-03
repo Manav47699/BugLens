@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BugLens — AI Runtime Debugger</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-icon">🔍</span>
+        <div>
+          <h1>BugLens</h1>
+          <p class="tagline">See bugs before your users do</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="/docs" class="link-muted" target="_blank" rel="noopener">API Docs</a>
+        <span id="healthBadge" class="badge badge-muted">Checking…</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Upload -->
+    <section class="card" id="uploadSection">
+      <h2 class="section-title">Upload Project</h2>
+      <p class="section-desc">
+        Upload a <strong>.zip</strong> of your React, Vite, or Next.js app.
+        BugLens will install dependencies, explore every route in a real browser,
+        and generate an AI bug report.
+      </p>
+
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".zip,application/zip" class="file-input">
+        <div class="dropzone-inner">
+          <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+          </svg>
+          <p class="dropzone-title" id="dropzoneTitle">Drop your project .zip here</p>
+          <p class="dropzone-hint">or click to browse · max recommended ~50 MB</p>
+        </div>
+      </div>
+
+      <div class="upload-actions">
+        <button type="button" id="startBtn" class="btn btn-primary" disabled>
+          Start Debug Session
+        </button>
+        <button type="button" id="cancelBtn" class="btn btn-ghost hidden">
+          Cancel Session
+        </button>
+      </div>
+
+      <details class="help-box">
+        <summary>How to zip your project</summary>
+        <pre class="help-code">cd your-project
+zip -r ../my-app.zip . -x "node_modules/*" -x ".git/*"</pre>
+      </details>
+    </section>
+
+    <!-- Pipeline -->
+    <section class="card hidden" id="pipelineSection">
+      <h2 class="section-title">Session Progress</h2>
+      <div class="pipeline" id="pipeline">
+        <div class="step" data-status="sandboxing">
+          <div class="step-dot"></div>
+          <span class="step-label">Sandbox</span>
+        </div>
+        <div class="step" data-status="exploring">
+          <div class="step-dot"></div>
+          <span class="step-label">Explore</span>
+        </div>
+        <div class="step" data-status="capturing">
+          <div class="step-dot"></div>
+          <span class="step-label">Capture</span>
+        </div>
+        <div class="step" data-status="analyzing">
+          <div class="step-dot"></div>
+          <span class="step-label">Analyze</span>
+        </div>
+        <div class="step" data-status="done">
+          <div class="step-dot"></div>
+          <span class="step-label">Report</span>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="session-meta" id="sessionMeta"></div>
+    </section>
+
+    <!-- Terminal -->
+    <section class="card terminal-card hidden" id="terminalSection">
+      <div class="terminal-header">
+        <span class="terminal-dots"><i></i><i></i><i></i></span>
+        <span class="terminal-title">Live Log</span>
+        <span class="terminal-count" id="logCount">0 lines</span>
+      </div>
+      <div class="terminal-body" id="terminalBody"></div>
+    </section>
+
+    <!-- Report -->
+    <section class="card hidden" id="reportSection">
+      <div class="report-header">
+        <h2 class="section-title">Bug Report</h2>
+        <a id="fullReportLink" href="#" class="btn btn-secondary" target="_blank" rel="noopener">
+          Open Full Report
+        </a>
+      </div>
+
+      <div class="summary-grid" id="summaryGrid"></div>
+      <div class="routes-block hidden" id="routesBlock">
+        <h3 class="sub-title">Routes Explored</h3>
+        <div class="route-tags" id="routeTags"></div>
+      </div>
+      <div id="bugsList"></div>
+
+      <div class="report-actions">
+        <button type="button" id="newSessionBtn" class="btn btn-primary">Run Another Session</button>
+      </div>
+    </section>
+
+    <!-- Error -->
+    <section class="card error-card hidden" id="errorSection">
+      <h2 class="section-title error-title">Session Failed</h2>
+      <p id="errorMessage" class="error-message"></p>
+      <button type="button" id="retryBtn" class="btn btn-primary">Try Again</button>
+    </section>
+
+    <!-- Past reports -->
+    <section class="card" id="historySection">
+      <h2 class="section-title">Past Reports</h2>
+      <div id="historyList" class="history-list">
+        <p class="empty-state">No reports yet. Upload a project to get started.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>BugLens · AI Runtime Debugging Platform</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

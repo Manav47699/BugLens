@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BugLens — Autonomous Frontend Debugger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --black: #060608;
+  --surface: #0e0e12;
+  --surface-2: #14141a;
+  --surface-3: #1c1c24;
+  --border: rgba(255,255,255,0.06);
+  --border-hover: rgba(255,255,255,0.12);
+  --silver: #c8c8d4;
+  --silver-dim: #7a7a8a;
+  --silver-bright: #eeeef4;
+  --accent: #e8e8f0;
+  --red: #ff3b3b;
+  --red-dim: rgba(255,59,59,0.12);
+  --green: #3bff8a;
+  --green-dim: rgba(59,255,138,0.10);
+  --blue-dim: rgba(100,140,255,0.10);
+  --font-display: 'Syne', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--black);
+  color: var(--silver);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* CURSOR */
+#cursor-dot {
+  width: 5px; height: 5px;
+  background: var(--silver-bright);
+  border-radius: 50%;
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  transition: width 0.15s, height 0.15s, background 0.15s;
+  mix-blend-mode: difference;
+}
+#cursor-ring {
+  width: 32px; height: 32px;
+  border: 1px solid rgba(200,200,212,0.4);
+  border-radius: 50%;
+  position: fixed;
+  pointer-events: none;
+  z-index: 9998;
+  transform: translate(-50%, -50%);
+  transition: width 0.25s ease, height 0.25s ease, border-color 0.25s ease, transform 0.08s linear;
+}
+body.hovering #cursor-dot { width: 8px; height: 8px; }
+body.hovering #cursor-ring {
+  width: 48px; height: 48px;
+  border-color: rgba(200,200,212,0.25);
+}
+
+/* BUG CANVAS */
+#bug-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* SCAN LINE OVERLAY */
+.scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+}
+
+/* LAYOUT */
+.app {
+  position: relative;
+  z-index: 2;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 40px 120px;
+}
+
+/* NAV */
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32px 0 0;
+  margin-bottom: 100px;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  width: 28px; height: 28px;
+  position: relative;
+}
+
+.logo-icon svg { width: 100%; height: 100%; }
+
+.logo-text {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--silver-bright);
+}
+.logo-text span { color: var(--silver-dim); font-weight: 500; }
+
+.nav-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--silver-dim);
+  letter-spacing: 0.08em;
+}
+
+.status-dot {
+  width: 5px; height: 5px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--green);
+  animation: statusPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green); }
+  50% { opacity: 0.5; box-shadow: 0 0 3px var(--green); }
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  list-style: none;
+}
+
+.nav-links a {
+  font-size: 0.78rem;
+  color: var(--silver-dim);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  transition: color 0.2s;
+  font-weight: 300;
+}
+.nav-links a:hover { color: var(--silver-bright); }
+
+/* HERO */
+.hero {
+  margin-bottom: 80px;
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--silver-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+
+.eyebrow-bracket { color: var(--red); opacity: 0.7; }
+
+.hero-headline {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  color: var(--silver-bright);
+  margin-bottom: 24px;
+}
+
+.hero-headline .line-2 {
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(200,200,212,0.25);
+}
+
+.hero-headline .accent-word {
+  position: relative;
+  display: inline-block;
+}
+
+.hero-headline .accent-word::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--red);
+  opacity: 0.7;
+}
+
+.hero-sub {
+  max-width: 480px;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--silver-dim);
+  font-weight: 300;
+  margin-bottom: 48px;
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.meta-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: rgba(122,122,138,0.6);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meta-value {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--silver);
+}
+
+.meta-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+}
+
+/* MAIN PANEL */
+.main-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 32px;
+  position: relative;
+}
+
+.panel-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.window-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.wc {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+
+.panel-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--silver-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.topbar-right {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: rgba(122,122,138,0.5);
+  letter-spacing: 0.06em;
+}
+
+.panel-body {
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr;
+  min-height: 320px;
+}
+
+.panel-left {
+  padding: 36px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.panel-right {
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* DROPZONE */
+.field-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--silver-dim);
+  margin-bottom: 10px;
+  display: block;
+}
+
+.dropzone {
+  border: 1px dashed rgba(255,255,255,0.1);
+  border-radius: 3px;
+  padding: 36px 24px;
+  text-align: center;
+  position: relative;
+  transition: border-color 0.2s, background 0.2s;
+  background: rgba(255,255,255,0.01);
+  flex: 1;
+}
+
+.dropzone:hover, .dropzone.active {
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.02);
+}
+
+.dropzone.has-files {
+  border-color: rgba(59,255,138,0.25);
+  background: rgba(59,255,138,0.02);
+}
+
+.dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  z-index: 5;
+  cursor: none;
+}
+
+.dz-icon {
+  width: 36px; height: 36px;
+  margin: 0 auto 14px;
+  opacity: 0.25;
+}
+
+.dz-title {
+  font-size: 0.82rem;
+  color: var(--silver);
+  font-weight: 400;
+  margin-bottom: 5px;
+}
+
+.dz-sub {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: rgba(122,122,138,0.5);
+  letter-spacing: 0.04em;
+}
+
+.dz-title.selected {
+  color: var(--green);
+}
+
+/* FRAMEWORK SELECT */
+.custom-select {
+  position: relative;
+}
+
+.custom-select select {
+  width: 100%;
+  appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--silver);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 12px 36px 12px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  letter-spacing: 0.02em;
+  cursor: none;
+}
+
+.custom-select select:focus { border-color: var(--border-hover); }
+
+.custom-select::after {
+  content: '↓';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--silver-dim);
+  font-size: 0.7rem;
+  pointer-events: none;
+}
+
+/* PIPELINE STEPS */
+.steps-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  opacity: 0.35;
+  transition: opacity 0.3s;
+}
+
+.step-item:last-child { border-bottom: none; }
+.step-item.active { opacity: 1; }
+.step-item.done { opacity: 0.6; }
+
+.step-num {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--silver-dim);
+  letter-spacing: 0.06em;
+  min-width: 20px;
+  padding-top: 1px;
+}
+
+.step-info { flex: 1; }
+
+.step-name {
+  font-size: 0.75rem;
+  color: var(--silver);
+  font-weight: 400;
+  margin-bottom: 2px;
+}
+
+.step-desc {
+  font-family: var(--font-mono);
+  font-size: 0.57rem;
+  color: rgba(122,122,138,0.5);
+  letter-spacing: 0.03em;
+}
+
+.step-status {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--silver-dim);
+  padding-top: 2px;
+}
+
+.step-item.done .step-status { color: var(--green); }
+.step-item.active .step-status { color: var(--accent); }
+.step-item.error .step-status { color: var(--red); }
+.step-item.error { opacity: 1; }
+
+/* LAUNCH BUTTON */
+.btn-launch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--silver-bright);
+  color: var(--black);
+  border: none;
+  border-radius: 3px;
+  padding: 18px 22px;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: none;
+  transition: opacity 0.2s, transform 0.1s;
+  position: relative;
+  overflow: hidden;
+  margin-top: auto;
+}
+
+.btn-launch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+
+.btn-launch:hover::before { transform: translateX(100%); }
+.btn-launch:hover { opacity: 0.92; }
+.btn-launch:active { transform: scale(0.995); }
+
+.btn-launch:disabled {
+  background: var(--surface-3);
+  color: var(--silver-dim);
+  border: 1px solid var(--border);
+}
+
+.btn-launch:disabled::before { display: none; }
+
+.btn-arrow {
+  width: 16px; height: 16px;
+}
+
+/* TERMINAL */
+.terminal-wrap {
+  display: none;
+  background: #07070a;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+
+.terminal-wrap.visible { display: block; }
+
+.term-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.term-dots { display: flex; gap: 5px; }
+.term-dots i {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  display: inline-block;
+}
+
+.term-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: rgba(122,122,138,0.5);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.term-body {
+  padding: 18px 20px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) transparent;
+}
+
+.tl {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: rgba(122,122,138,0.7);
+  display: flex;
+  gap: 10px;
+}
+
+.tl-time { color: rgba(122,122,138,0.4); min-width: 60px; }
+.tl.exec .tl-msg { color: rgba(180,180,196,0.7); }
+.tl.ok .tl-msg { color: #3bff8a; }
+.tl.err .tl-msg { color: #ff5555; }
+.tl.warn .tl-msg { color: #ffaa33; }
+
+/* PROGRESS BAR */
+.progress-track {
+  height: 2px;
+  background: var(--surface-3);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--silver-bright);
+  width: 0%;
+  transition: width 0.8s ease;
+  position: relative;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6));
+}
+
+/* REPORT */
+.report-wrap {
+  display: none;
+}
+
+.report-wrap.visible { display: block; }
+
+.report-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.rd-line { flex: 1; height: 1px; background: var(--border); }
+
+.rd-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: rgba(122,122,138,0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.r-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.r-card.critical {
+  background: rgba(255,59,59,0.03);
+  border-color: rgba(255,59,59,0.15);
+}
+
+.r-card.fix {
+  background: rgba(100,140,255,0.03);
+  border-color: rgba(100,140,255,0.12);
+}
+
+.rc-head {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.r-card.critical .rc-head { border-bottom-color: rgba(255,59,59,0.12); }
+.r-card.fix .rc-head { border-bottom-color: rgba(100,140,255,0.1); }
+
+.rc-badge {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 2px;
+  font-weight: 700;
+}
+
+.badge-crit {
+  background: rgba(255,59,59,0.12);
+  color: var(--red);
+  border: 1px solid rgba(255,59,59,0.2);
+}
+
+.badge-fix {
+  background: rgba(100,140,255,0.12);
+  color: #7aa0ff;
+  border: 1px solid rgba(100,140,255,0.2);
+}
+
+.disaster-score {
+  text-align: right;
+}
+
+.ds-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: rgba(122,122,138,0.5);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.ds-val {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--silver-bright);
+  line-height: 1;
+}
+
+.ds-val sup {
+  font-size: 0.7rem;
+  color: var(--silver-dim);
+  font-weight: 400;
+}
+
+.rc-body { padding: 20px; }
+
+.detail-row {
+  margin-bottom: 14px;
+}
+.detail-row:last-child { margin-bottom: 0; }
+
+.dr-label {
+  font-family: var(--font-mono);
+  font-size: 0.57rem;
+  color: rgba(122,122,138,0.5);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.dr-val {
+  font-size: 0.82rem;
+  color: var(--silver);
+  line-height: 1.5;
+}
+
+.dr-val.file-tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 4px 8px;
+  display: inline-block;
+  color: var(--silver-dim);
+}
+
+.patch-text {
+  font-size: 0.8rem;
+  color: var(--silver-dim);
+  line-height: 1.65;
+  font-weight: 300;
+  margin-bottom: 16px;
+}
+
+.code-wrap {
+  background: #030305;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: rgba(122,122,138,0.4);
+  letter-spacing: 0.06em;
+}
+
+.btn-copy {
+  background: none;
+  border: none;
+  color: rgba(122,122,138,0.5);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  cursor: none;
+  transition: color 0.15s;
+  letter-spacing: 0.05em;
+}
+
+.btn-copy:hover { color: var(--silver); }
+
+.code-body {
+  padding: 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.6;
+  color: #b8b8cc;
+  white-space: pre;
+}
+
+/* SEVERITY METER */
+.severity-meter {
+  grid-column: 1 / -1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.sm-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--silver-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-width: 80px;
+}
+
+.sm-track {
+  flex: 1;
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+.sm-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #3bff8a 0%, #ffaa33 55%, #ff3b3b 100%);
+  width: 0%;
+  transition: width 1.2s ease;
+}
+
+.sm-val {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--silver-bright);
+  min-width: 36px;
+  text-align: right;
+}
+
+/* FLOATING TAGS */
+.tags-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.57rem;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  color: rgba(122,122,138,0.6);
+  background: var(--surface-2);
+}
+
+/* ANIMATE IN */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.anim-in {
+  animation: fadeUp 0.5s ease both;
+}
+
+/* GRID CORNER MARKS */
+.main-panel::before, .main-panel::after {
+  content: '';
+  position: absolute;
+  width: 8px; height: 8px;
+  border-color: rgba(255,255,255,0.15);
+  border-style: solid;
+}
+
+.main-panel::before {
+  top: -1px; left: -1px;
+  border-width: 1px 0 0 1px;
+}
+
+.main-panel::after {
+  bottom: -1px; right: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+
+/* GLITCH EFFECT */
+@keyframes glitch1 {
+  0%, 90%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); }
+  92% { clip-path: inset(20% 0 60% 0); transform: translate(-3px, 0); }
+  94% { clip-path: inset(60% 0 10% 0); transform: translate(3px, 0); }
+  96% { clip-path: inset(40% 0 40% 0); transform: translate(-2px, 0); }
+  98% { clip-path: inset(10% 0 80% 0); transform: translate(2px, 0); }
+}
+
+@keyframes glitch2 {
+  0%, 90%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); opacity: 0; }
+  92% { clip-path: inset(65% 0 20% 0); transform: translate(3px, 0); opacity: 0.5; }
+  94% { clip-path: inset(10% 0 75% 0); transform: translate(-3px, 0); opacity: 0.5; }
+  96% { clip-path: inset(50% 0 30% 0); transform: translate(2px, 0); opacity: 0.3; }
+  98% { clip-path: inset(80% 0 5% 0); transform: translate(-2px, 0); opacity: 0.4; }
+}
+
+.glitch-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.glitch-wrap::before,
+.glitch-wrap::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  font-family: var(--font-display);
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.glitch-wrap::before {
+  color: rgba(255,100,100,0.7);
+  animation: glitch1 7s infinite;
+}
+
+.glitch-wrap::after {
+  color: rgba(100,140,255,0.5);
+  animation: glitch2 7s infinite;
+  animation-delay: 0.05s;
+}
+
+/* HERO ENTRY */
+@keyframes heroIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-eyebrow { animation: heroIn 0.6s ease both; }
+.hero-headline { animation: heroIn 0.7s 0.1s ease both; }
+.hero-sub { animation: heroIn 0.7s 0.2s ease both; }
+.hero-meta { animation: heroIn 0.7s 0.3s ease both; }
+.main-panel { animation: heroIn 0.7s 0.4s ease both; }
+
+/* SCAN LINE FLICKER */
+@keyframes scanFlicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.85; }
+  94% { opacity: 1; }
+  97% { opacity: 0.92; }
+  98% { opacity: 1; }
+}
+
+.scanlines { animation: scanFlicker 8s infinite; }
+
+/* TERMINAL CURSOR BLINK */
+@keyframes termBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.term-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 10px;
+  background: var(--silver-dim);
+  animation: termBlink 1s step-end infinite;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+/* SCORE REVEAL */
+@keyframes scoreReveal {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.score-reveal { animation: scoreReveal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* BUG COUNT BADGE */
+.bug-counter {
+  position: fixed;
+  bottom: 32px;
+  right: 40px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: rgba(122,122,138,0.25);
+  letter-spacing: 0.08em;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* CORNER DECORATION */
+.corner-tl, .corner-br {
+  position: fixed;
+  width: 40px; height: 40px;
+  pointer-events: none;
+  z-index: 10;
+}
+.corner-tl { top: 20px; left: 20px; border-top: 1px solid rgba(255,255,255,0.06); border-left: 1px solid rgba(255,255,255,0.06); }
+.corner-br { bottom: 20px; right: 20px; border-bottom: 1px solid rgba(255,255,255,0.06); border-right: 1px solid rgba(255,255,255,0.06); }
+
+/* RESPONSIVE */
+@media (max-width: 720px) {
+  .app { padding: 0 20px 80px; }
+  .panel-body { grid-template-columns: 1fr; }
+  .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+  .report-grid { grid-template-columns: 1fr; }
+  .hero-headline { font-size: 2.4rem; }
+  nav { flex-wrap: wrap; gap: 16px; }
+  .nav-links { display: none; }
+}
+
+/* NOISE */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0.022;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+</style>
+</head>
+<body>
+
+<div id="cursor-dot"></div>
+<div id="cursor-ring"></div>
+<canvas id="bug-canvas"></canvas>
+<div class="scanlines"></div>
+
+<div class="app">
+
+  <nav>
+    <div class="nav-logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="14" cy="14" r="13" stroke="rgba(200,200,212,0.15)" stroke-width="1"/>
+          <path d="M9 10C9 10 10 8 14 8C18 8 19 10 19 10" stroke="rgba(200,200,212,0.5)" stroke-width="1" stroke-linecap="round"/>
+          <path d="M7 14H10M18 14H21" stroke="rgba(200,200,212,0.4)" stroke-width="1" stroke-linecap="round"/>
+          <path d="M8 18L10 16.5M18 16.5L20 18" stroke="rgba(200,200,212,0.3)" stroke-width="1" stroke-linecap="round"/>
+          <ellipse cx="14" cy="16" rx="5" ry="6" stroke="rgba(200,200,212,0.7)" stroke-width="1"/>
+          <circle cx="11.5" cy="13.5" r="1" fill="rgba(200,200,212,0.6)"/>
+          <circle cx="16.5" cy="13.5" r="1" fill="rgba(200,200,212,0.6)"/>
+        </svg>
+      </div>
+      <span class="logo-text">Bug<span>Lens</span></span>
+    </div>
+
+    <div class="nav-status">
+      <span class="status-dot"></span>
+      <span>ENGINE READY</span>
+    </div>
+
+    <ul class="nav-links">
+      <li><a href="#">Pipeline</a></li>
+      <li><a href="#">Docs</a></li>
+      <li><a href="#">Changelog</a></li>
+    </ul>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-eyebrow">
+      <span class="eyebrow-bracket">[</span>
+      <span>autonomous runtime debugger</span>
+      <span class="eyebrow-bracket">]</span>
+    </div>
+
+    <h1 class="hero-headline">
+      <span class="line-1">Find Every</span><br>
+      <span class="line-2 accent-word"><span class="glitch-wrap" data-text="Bug.">Bug.</span></span><br>
+      <span class="line-1">Before Users Do.</span>
+    </h1>
+
+    <p class="hero-sub">
+      Drop your project. BugLens autonomously crawls every route, clicks every button, and maps each crash back to the exact source file — then explains it in plain English.
+    </p>
+
+    <div class="hero-meta">
+      <div class="meta-item">
+        <span class="meta-label">Isolation</span>
+        <span class="meta-value">Docker</span>
+      </div>
+      <div class="meta-divider"></div>
+      <div class="meta-item">
+        <span class="meta-label">Automation</span>
+        <span class="meta-value">Playwright</span>
+      </div>
+      <div class="meta-divider"></div>
+      <div class="meta-item">
+        <span class="meta-label">Analysis</span>
+        <span class="meta-value">Ollama LLM</span>
+      </div>
+      <div class="meta-divider"></div>
+      <div class="meta-item">
+        <span class="meta-label">Backend</span>
+        <span class="meta-value">FastAPI</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="main-panel" id="mainPanel">
+    <div class="panel-topbar">
+      <div class="topbar-left">
+        <div class="window-controls">
+          <div class="wc"></div>
+          <div class="wc"></div>
+          <div class="wc"></div>
+        </div>
+        <span class="panel-label">Diagnostic Console</span>
+      </div>
+      <span class="topbar-right">v0.9.1-beta</span>
+    </div>
+
+    <div class="panel-body">
+      <div class="panel-left">
+
+        <div>
+          <span class="field-label">Target Project Workspace</span>
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="filePicker" webkitdirectory directory multiple>
+            <svg class="dz-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 10a4 4 0 014-4h6l2 3h12a4 4 0 014 4v14a4 4 0 01-4 4H8a4 4 0 01-4-4V10z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M18 16v8M15 21l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="dz-title" id="dzTitle">Drop project folder here</div>
+            <div class="dz-sub">or click to browse — webkitdirectory supported</div>
+          </div>
+        </div>
+
+        <div>
+          <span class="field-label">Execution Environment</span>
+          <div class="custom-select">
+            <select id="frameworkSelect">
+              <option value="react">React / Vite (SPA)</option>
+              <option value="next">Next.js (SSR/SSG)</option>
+              <option value="vanilla">Vanilla HTML5</option>
+              <option value="vue" disabled>Vue 3 — Coming Soon</option>
+              <option value="svelte" disabled>Svelte — Coming Soon</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="tags-row">
+          <span class="tag">console monitoring</span>
+          <span class="tag">network tracing</span>
+          <span class="tag">dom snapshot</span>
+          <span class="tag">source mapping</span>
+          <span class="tag">LLM analysis</span>
+        </div>
+
+      </div>
+
+      <div class="panel-right">
+        <div>
+          <span class="field-label">Pipeline Stages</span>
+          <ul class="steps-list" id="stepsList">
+            <li class="step-item" data-step="0">
+              <span class="step-num">01</span>
+              <div class="step-info">
+                <div class="step-name">Workspace Isolation</div>
+                <div class="step-desc">Docker sandbox init</div>
+              </div>
+              <span class="step-status">—</span>
+            </li>
+            <li class="step-item" data-step="1">
+              <span class="step-num">02</span>
+              <div class="step-info">
+                <div class="step-name">Dependency Install</div>
+                <div class="step-desc">npm install + build</div>
+              </div>
+              <span class="step-status">—</span>
+            </li>
+            <li class="step-item" data-step="2">
+              <span class="step-num">03</span>
+              <div class="step-info">
+                <div class="step-name">Playwright Agent</div>
+                <div class="step-desc">Route + DOM crawl</div>
+              </div>
+              <span class="step-status">—</span>
+            </li>
+            <li class="step-item" data-step="3">
+              <span class="step-num">04</span>
+              <div class="step-info">
+                <div class="step-name">Evidence Collection</div>
+                <div class="step-desc">Logs, traces, screenshots</div>
+              </div>
+              <span class="step-status">—</span>
+            </li>
+            <li class="step-item" data-step="4">
+              <span class="step-num">05</span>
+              <div class="step-info">
+                <div class="step-name">LLM Analysis</div>
+                <div class="step-desc">Ollama qwen2.5 inference</div>
+              </div>
+              <span class="step-status">—</span>
+            </li>
+          </ul>
+        </div>
+
+        <button class="btn-launch" id="launchBtn" disabled>
+          <span>Initialize Diagnostic</span>
+          <svg class="btn-arrow" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+  </section>
+
+  <!-- TERMINAL -->
+  <div class="terminal-wrap" id="terminalWrap">
+    <div class="term-bar">
+      <div class="term-dots">
+        <i></i><i></i><i></i>
+      </div>
+      <span class="term-label">Live Log Thread</span>
+      <span class="term-label" id="termCounter" style="font-size:0.55rem; opacity:0.5;"></span>
+    </div>
+    <div class="term-body" id="termBody"></div>
+  </div>
+
+  <!-- REPORT -->
+  <div class="report-wrap" id="reportWrap">
+    <div class="report-divider">
+      <div class="rd-line"></div>
+      <span class="rd-label">Diagnostic Assessment Report</span>
+      <div class="rd-line"></div>
+    </div>
+
+    <div class="report-grid">
+      <div class="r-card critical anim-in">
+        <div class="rc-head">
+          <span class="rc-badge badge-crit">Critical Exception</span>
+          <div class="disaster-score">
+            <span class="ds-label">Disaster Rating</span>
+            <span class="ds-val" id="scoreVal">—<sup>/10</sup></span>
+          </div>
+        </div>
+        <div class="rc-body">
+          <div class="detail-row">
+            <div class="dr-label">Observed Event</div>
+            <div class="dr-val" id="rProblem">Evaluating...</div>
+          </div>
+          <div class="detail-row">
+            <div class="dr-label">Source Module</div>
+            <div class="dr-val file-tag" id="rFile">—</div>
+          </div>
+          <div class="detail-row">
+            <div class="dr-label">Root Cause</div>
+            <div class="dr-val" id="rCause">Evaluating...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="r-card fix anim-in" style="animation-delay: 0.08s">
+        <div class="rc-head">
+          <span class="rc-badge badge-fix">Automated Remediation</span>
+        </div>
+        <div class="rc-body">
+          <p class="patch-text" id="rExplan">Analyzing structural traces...</p>
+          <div class="code-wrap">
+            <div class="code-head">
+              <span>suggested.patch.js</span>
+              <button class="btn-copy" id="copyBtn">[ copy ]</button>
+            </div>
+            <div class="code-body" id="rFix">// Resolution patch will appear here</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="severity-meter anim-in" style="animation-delay: 0.16s">
+        <span class="sm-label">Severity Index</span>
+        <div class="sm-track">
+          <div class="sm-fill" id="smFill"></div>
+        </div>
+        <span class="sm-val" id="smVal">0.0</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── CURSOR ───────────────────────────────────────────────
+const dot = document.getElementById('cursor-dot');
+const ring = document.getElementById('cursor-ring');
+let mx = -100, my = -100, rx = -100, ry = -100;
+
+document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+(function animCursor() {
+  rx += (mx - rx) * 0.12;
+  ry += (my - ry) * 0.12;
+  dot.style.left = mx + 'px'; dot.style.top = my + 'px';
+  ring.style.left = rx + 'px'; ring.style.top = ry + 'px';
+  requestAnimationFrame(animCursor);
+})();
+
+document.querySelectorAll('button, select, input, .dropzone, .btn-copy, a').forEach(el => {
+  el.addEventListener('mouseenter', () => document.body.classList.add('hovering'));
+  el.addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+});
+
+// ─── BUG CANVAS ───────────────────────────────────────────
+const canvas = document.getElementById('bug-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Bug shapes — SVG-like paths rendered on canvas
+class Bug {
+  constructor() { this.reset(true); }
+
+  reset(init) {
+    this.x = Math.random() * canvas.width;
+    this.y = init ? Math.random() * canvas.height : canvas.height + 20;
+    this.size = 6 + Math.random() * 14;
+    this.speed = 0.15 + Math.random() * 0.35;
+    this.angle = Math.random() * Math.PI * 2;
+    this.angleSpeed = (Math.random() - 0.5) * 0.008;
+    this.opacity = 0.02 + Math.random() * 0.07;
+    this.wander = (Math.random() - 0.5) * 0.4;
+    this.legPhase = Math.random() * Math.PI * 2;
+    this.type = Math.floor(Math.random() * 3); // 0=beetle, 1=spider, 2=ant
+    this.wobble = 0;
+    this.wobbleSpeed = 0.02 + Math.random() * 0.03;
+  }
+
+  update() {
+    this.wobble += this.wobbleSpeed;
+    this.angle += this.angleSpeed + Math.sin(this.wobble) * 0.005;
+    this.x += Math.cos(this.angle) * this.speed + this.wander * Math.sin(this.wobble * 2);
+    this.y -= this.speed * 0.3;
+    this.legPhase += 0.06;
+
+    if (this.y < -30 || this.x < -50 || this.x > canvas.width + 50) this.reset(false);
+  }
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle + Math.PI / 2);
+    ctx.globalAlpha = this.opacity;
+    ctx.strokeStyle = 'rgba(200,200,220,1)';
+    ctx.fillStyle = 'rgba(200,200,220,1)';
+    ctx.lineWidth = 0.7;
+
+    const s = this.size;
+
+    if (this.type === 0) {
+      // Beetle body
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s * 0.4, s * 0.65, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Head
+      ctx.beginPath();
+      ctx.ellipse(0, -s * 0.75, s * 0.25, s * 0.22, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Antennae
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.15, -s * 0.9);
+      ctx.lineTo(-s * 0.5, -s * 1.4);
+      ctx.moveTo(s * 0.15, -s * 0.9);
+      ctx.lineTo(s * 0.5, -s * 1.4);
+      ctx.stroke();
+      // Legs
+      for (let i = -1; i <= 1; i++) {
+        const lp = Math.sin(this.legPhase + i) * 0.15;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.38, i * s * 0.25);
+        ctx.lineTo(-s * 0.85, i * s * 0.25 + lp * s);
+        ctx.moveTo(s * 0.38, i * s * 0.25);
+        ctx.lineTo(s * 0.85, i * s * 0.25 - lp * s);
+        ctx.stroke();
+      }
+    } else if (this.type === 1) {
+      // Spider body
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 0.3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.55, s * 0.22, 0, Math.PI * 2);
+      ctx.stroke();
+      // 8 legs
+      for (let i = 0; i < 4; i++) {
+        const ang = (i / 3) * 1.8 - 0.9;
+        const lp = Math.sin(this.legPhase + i * 0.8) * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.3, 0);
+        ctx.quadraticCurveTo(-s * 0.7, -lp * s, -s * (0.9 + i * 0.1), ang * s * 0.6);
+        ctx.moveTo(s * 0.3, 0);
+        ctx.quadraticCurveTo(s * 0.7, lp * s, s * (0.9 + i * 0.1), ang * s * 0.6);
+        ctx.stroke();
+      }
+    } else {
+      // Ant body — 3 segments
+      ctx.beginPath();
+      ctx.ellipse(0, s * 0.4, s * 0.2, s * 0.3, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s * 0.18, s * 0.18, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(0, -s * 0.5, s * 0.22, s * 0.25, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Antennae
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.1, -s * 0.7);
+      ctx.lineTo(-s * 0.4, -s * 1.1);
+      ctx.moveTo(s * 0.1, -s * 0.7);
+      ctx.lineTo(s * 0.4, -s * 1.1);
+      ctx.stroke();
+      // 3 pairs of legs
+      for (let i = 0; i < 3; i++) {
+        const lp = Math.sin(this.legPhase + i * 1.2) * 0.1;
+        const yOff = (i - 1) * s * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.18, yOff);
+        ctx.lineTo(-s * 0.7, yOff + lp * s);
+        ctx.moveTo(s * 0.18, yOff);
+        ctx.lineTo(s * 0.7, yOff - lp * s);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+}
+
+const bugs = Array.from({ length: 28 }, () => new Bug());
+
+function animBugs() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  bugs.forEach(b => { b.update(); b.draw(); });
+  requestAnimationFrame(animBugs);
+}
+animBugs();
+
+// ─── FILE PICKER ──────────────────────────────────────────
+const filePicker = document.getElementById('filePicker');
+const dropzone = document.getElementById('dropzone');
+const dzTitle = document.getElementById('dzTitle');
+const launchBtn = document.getElementById('launchBtn');
+let projectName = '';
+
+filePicker.addEventListener('change', e => {
+  const files = e.target.files;
+  if (files.length > 0) {
+    projectName = files[0].webkitRelativePath.split('/')[0];
+    dzTitle.textContent = `/${projectName}  (${files.length} files)`;
+    dzTitle.className = 'dz-title selected';
+    dropzone.classList.add('has-files');
+    launchBtn.removeAttribute('disabled');
+    termLog(`Workspace mapped: /${projectName} — ${files.length} files indexed`, 'ok');
+    terminalWrap.classList.add('visible');
+  }
+});
+
+['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('active'); }));
+['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('active'); }));
+
+// ─── TERMINAL ─────────────────────────────────────────────
+const terminalWrap = document.getElementById('terminalWrap');
+const termBody = document.getElementById('termBody');
+let lineCount = 0;
+
+function termLog(msg, type = 'exec') {
+  lineCount++;
+  const line = document.createElement('div');
+  line.className = `tl ${type}`;
+  const t = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  line.innerHTML = `<span class="tl-time">${t}</span><span class="tl-msg">${msg}</span>`;
+  termBody.appendChild(line);
+  termBody.scrollTop = termBody.scrollHeight;
+  document.getElementById('termCounter').textContent = lineCount + ' lines';
+}
+
+// ─── STEPS ────────────────────────────────────────────────
+const steps = document.querySelectorAll('.step-item');
+
+function setStep(idx, status) {
+  steps.forEach((s, i) => {
+    s.classList.remove('active', 'done', 'error');
+    const statusEl = s.querySelector('.step-status');
+    if (i < idx) { s.classList.add('done'); statusEl.textContent = '✓'; }
+    else if (i === idx) {
+      if (status === 'error') { s.classList.add('error'); statusEl.textContent = '✗'; }
+      else { s.classList.add('active'); statusEl.textContent = '●'; }
+    } else { statusEl.textContent = '—'; }
+  });
+}
+
+function setProgress(pct) {
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+// ─── LAUNCH ───────────────────────────────────────────────
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+launchBtn.addEventListener('click', async () => {
+  termBody.innerHTML = '';
+  lineCount = 0;
+  terminalWrap.classList.add('visible');
+  document.getElementById('reportWrap').classList.remove('visible');
+  launchBtn.setAttribute('disabled', '');
+  setProgress(0);
+
+  const logs = [
+    [0, 'exec', 'Initializing BugLens diagnostic engine...', 5],
+    [0, 'exec', `Target workspace: /${projectName || 'unknown'}`, 8],
+    [1, 'exec', 'Spawning Docker isolation container...', 10],
+    [1, 'exec', 'Container ready — sandboxed runtime active', 18],
+    [1, 'ok',   'npm install completed — 847 packages resolved', 25],
+    [2, 'exec', 'Playwright browser agent initialized', 30],
+    [2, 'exec', 'Crawling routes: /, /login, /dashboard, /settings', 38],
+    [2, 'ok',   'Route discovery complete — 12 interactive nodes found', 45],
+    [3, 'exec', 'Executing DOM interaction sequence...', 50],
+    [3, 'exec', 'Triggering: button#submit-form, input[type=email], nav links...', 55],
+    [3, 'err',  'UNCAUGHT EXCEPTION: TypeError — Cannot read properties of undefined', 60],
+    [3, 'err',  'Stack: at LoginForm.handleSubmit (LoginForm.jsx:47:18)', 62],
+    [4, 'exec', 'Collecting evidence: 6 screenshots, 4 console dumps, 1 stack trace', 70],
+    [4, 'exec', 'Source map resolved → components/LoginForm.jsx:47', 78],
+    [4, 'exec', 'Packaging telemetry payload for LLM analysis...', 82],
+    [4, 'exec', 'Querying Ollama node (qwen2.5:0.5b) — local inference...', 86],
+  ];
+
+  for (const [step, type, msg, pct] of logs) {
+    setStep(step, type === 'err' ? 'error' : 'active');
+    setProgress(pct);
+    termLog(msg, type);
+    await delay(400 + Math.random() * 400);
+  }
+
+  // Hit backend
+  try {
+    const res = await fetch('http://127.0.0.1:8000/debug', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: projectName })
+    });
+    if (!res.ok) throw new Error('Backend offline');
+    const data = await res.json();
+    renderReport(data);
+  } catch (_) {
+    termLog('Backend not reachable — rendering prototype report', 'warn');
+    await delay(600);
+    renderReport(null);
+  }
+
+  setProgress(100);
+  steps.forEach((s, i) => {
+    s.classList.remove('active', 'error');
+    s.classList.add('done');
+    s.querySelector('.step-status').textContent = '✓';
+  });
+  launchBtn.removeAttribute('disabled');
+});
+
+// ─── REPORT ───────────────────────────────────────────────
+function renderReport(data) {
+  const d = data || {
+    problem: 'Login button triggers uncaught TypeError at form submission',
+    file: 'components/LoginForm.jsx',
+    cause: 'handleSubmit accesses user.email on an uninitialized object — form state not validated before dispatch.',
+    explanation: 'The event handler fires before the async user context resolves. The component renders without awaiting the auth state, so user is undefined at click-time.',
+    fix: `// Defensive guard before form dispatch
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  // Validate state exists before access
+  if (!formState || !formState.email) {
+    setError("Please complete all required fields.");
+    return;
+  }
+
+  try {
+    await dispatch(loginUser(formState));
+  } catch (err) {
+    setError(err.message);
+  }
+};`,
+    score: 8.5
+  };
+
+  document.getElementById('rProblem').textContent = d.problem;
+  document.getElementById('rFile').textContent = d.file;
+  document.getElementById('rCause').textContent = d.cause;
+  document.getElementById('rExplan').textContent = d.explanation;
+  document.getElementById('rFix').textContent = d.fix;
+
+  const score = d.score || 8.5;
+  document.getElementById('scoreVal').innerHTML = score + '<sup>/10</sup>';
+  document.getElementById('smVal').textContent = score.toFixed(1);
+
+  const reportWrap = document.getElementById('reportWrap');
+  reportWrap.classList.add('visible');
+
+  setTimeout(() => {
+    document.getElementById('smFill').style.width = (score / 10 * 100) + '%';
+  }, 100);
+
+  termLog('Analysis complete — report rendered', 'ok');
+  termLog(`Severity index: ${score}/10`, score >= 7 ? 'err' : 'warn');
+
+  reportWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─── COPY ─────────────────────────────────────────────────
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const code = document.getElementById('rFix').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '[ copied ✓ ]';
+    setTimeout(() => btn.textContent = '[ copy ]', 2000);
+  });
+});
+</script>
+<div class="corner-tl"></div>
+<div class="corner-br"></div>
+<div class="bug-counter" id="bugCounter">28 BUGS FLOATING</div>
+</body>
+</html>
+<!-- Enhancement patch applied separately via app.js if needed -->

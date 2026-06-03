@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether Debugger Engine</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="custom-cursor"></div>
+
+    <div class="glow-overlay"></div>
+
+    <main class="dashboard-container">
+        <header class="engine-header">
+            <div class="logo-area">
+                <span class="pulse-indicator"></span>
+                <h1>Aether Runtime Auditor</h1>
+            </div>
+            <p class="subtitle">Autonomous diagnostic pipeline for local clients</p>
+        </header>
+
+        <section class="config-card">
+            <div class="grid-layout">
+                <div class="input-group">
+                    <label class="field-label">Target Application Workspace</label>
+                    <div class="dropzone-area" id="dropzone">
+                        <input type="file" id="directoryPicker" webkitdirectory directory multiple class="hidden-input">
+                        <div class="dropzone-content">
+                            <svg class="icon-upload" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                            <span class="upload-title" id="uploadStatus">Select project folder</span>
+                            <span class="upload-subtitle">Aggregates runtime static files natively</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="input-group">
+                        <label for="frameworkSelect" class="field-label">Execution Environment Environment</label>
+                        <div class="select-wrapper">
+                            <select id="frameworkSelect">
+                                <option value="vanilla">Vanilla HTML5 / JS (Core Engine)</option>
+                                <option value="react" disabled>React SPA Engine (Coming Soon)</option>
+                                <option value="next" disabled>Next.js Core SSR (Coming Soon)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="button" id="startDebugBtn" class="btn-primary" disabled>
+                        <span>Initialize Diagnostic Cycle</span>
+                        <svg class="icon-arrow" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="terminal-section hidden" id="terminalSection">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <span></span><span></span><span></span>
+                </div>
+                <div class="terminal-title">Active Log Thread</div>
+            </div>
+            <div class="terminal-body" id="terminalOutput">
+                </div>
+        </section>
+
+        <section class="summary-section hidden" id="summarySection">
+            <div class="section-divider">
+                <span>Diagnostic Assessment Report</span>
+            </div>
+
+            <div class="report-grid">
+                <div class="report-card critical-alert">
+                    <div class="card-header">
+                        <span class="severity-badge">CRITICAL EXCEPTION</span>
+                        <div class="disaster-score">
+                            <span class="score-label">Disaster Rating</span>
+                            <span class="score-value">8.5<span class="total-score">/10</span></span>
+                        </div>
+                    </div>
+                    
+                    <div class="report-body">
+                        <div class="metric-row">
+                            <span class="metric-label">Observed Event:</span>
+                            <span class="metric-value value-highlight" id="reportProblem">Evaluating...</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Target Module Trace:</span>
+                            <span class="metric-value source-file" id="reportFile">Evaluating...</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Root Instigator:</span>
+                            <span class="metric-value" id="reportCause">Evaluating...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-card optimization-card">
+                    <div class="card-header">
+                        <span class="remedy-badge">Automated Remediation Patch</span>
+                    </div>
+                    <div class="report-body">
+                        <p class="patch-explanation" id="reportExplanation">Analyzing structural traces...</p>
+                        <div class="code-block-wrapper">
+                            <div class="code-header">
+                                <span>Suggested Modification</span>
+                                <button class="btn-copy" id="copyCodeBtn">Copy</button>
+                            </div>
+                            <pre><code id="reportFix">// Structured resolution patch will map here</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
